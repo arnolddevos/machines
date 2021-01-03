@@ -1,0 +1,9 @@
+/target/
+/project/target/
+/project/project/
+/.bloop/
+/attic/
+/.vscode/
+/.bsp/
+.dotty-ide-artifact
+.dotty-ide.json
