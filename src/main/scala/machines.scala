@@ -15,7 +15,7 @@ val e = Error("oh")
 
 type SimpleMachine[-A, +B] = Machine[A, B, Unit, Nothing]
 
-def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B): SimpleMachine[A, B] =
+def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B, p: (S, A) => Boolean): SimpleMachine[A, B] =
   class Plan:
     val phase1f = phase1
     val phase2f = phase2
@@ -25,23 +25,25 @@ def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B): SimpleMachine[A, B] =
       React(s1, phase2f, stop)
 
     def phase2(s1: S, a: A): SimpleMachine[A, B] =
-      Emit(g(s1, a), f(s1, a), phase1f)
+      if p(s1, a) then Emit(g(s1, a), f(s1, a), phase1f)
+      else phase1(f(s1, a))
       
   Plan().phase1(s0)
 
-def moore[A, B, S](s0: S)(f: (S, A) => S, g: S => B): SimpleMachine[A, B] =
+def moore[A, B, S](s0: S)(f: (S, A) => S, g: S => B, p: S => Boolean): SimpleMachine[A, B] =
   class Plan:
     val phase1f = (s: S, a: A) => phase1(f(s, a))
     val phase2f = phase2
     val stop = (s: S) => Stop(()) 
 
     def phase1(s1: S): SimpleMachine[A, B] =
-      Emit(g(s1), s1, phase2f)
+      if p(s1) then Emit(g(s1), s1, phase2f)
+      else phase2(s1)
 
     def phase2(s1: S): SimpleMachine[A, B] =
       React(s1, phase1f, stop)
       
   Plan().phase1(s0)
 
-def mapper[A, B](f: A => B): SimpleMachine[A, B] = 
-  mealy(())((s, _) => s, (_, a) => f(a))
+def filterMap[A, B](f: A => B, p: A => Boolean): SimpleMachine[A, B] = 
+  mealy(())((s, _) => s, (_, a) => f(a), (_, a) => p(a))
