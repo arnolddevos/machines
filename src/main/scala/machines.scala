@@ -8,11 +8,6 @@ enum Machine[-A, +B, +C, +D]:
   
 import Machine._
 
-val s = React((), (_: Any, i: Int) => Stop("Done"), (_: Any) => Stop(()))
-val m = Emit("Hi", (), _ => Stop(1))
-val c = Stop(12)
-val e = Error("oh")
-
 type SimpleMachine[-A, +B] = Machine[A, B, Unit, Nothing]
 
 def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B, p: (S, A) => Boolean): SimpleMachine[A, B] =
