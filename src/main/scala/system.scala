@@ -1,9 +1,9 @@
 package machines
 
-case class System(cs: Node*)
+case class System(cs: Process*)
 
-enum Node:
-  case Process[A, B, C, D](m: Machine[A, B, C, D], a: Topic[A], b: Topic[B], c: Topic[C], d: Topic[D])
+enum Process:
+  case Stage[A, B, C](m: Machine[A, B, C], a: Topic[A], b: Topic[B], c: Topic[C])
   case Input[A](a: Topic[A])
   case Output[A](a: Topic[A])
   case Subsystem(s: System)
