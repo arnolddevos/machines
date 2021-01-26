@@ -8,7 +8,10 @@ val m = Emit("Hi", Stop(1))
 val c = Stop(12)
 val e = Error(new RuntimeException("oh"))
 
-val ti = Distribute[Int]
-val tt = Distribute[String]
-val n1 = Process.Stage(m, discard, tt, ti)
-val n2 = Process.Stage(m, unused, tt, discard)
+
+object Doubler extends Actor[Int, Int]:
+  def start = react { i => send(i*2)(start) }
+
+object Incrementer extends Actor[Int, Int]:
+  def start = react { i => send(i+1)(start) }
+
