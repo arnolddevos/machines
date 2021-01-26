@@ -7,7 +7,7 @@ trait Actor[A, B]:
   opaque type Cont = Machine[A, B, Any]
 
   final def process: Process[A, B, Any] = 
-    Process.Transducer(machine)
+    Process.Run(machine)
   final def machine: Machine[A, B, Any] =
     Defer(this, a => a.start)
   final def react(cont: A => Cont): Cont = 
