@@ -24,5 +24,3 @@ enum Process[-A, +B, +C]:
   case System(processes: Process[Nothing, Nothing, Any]*) extends Process[Nothing, Nothing, Any]
 
   def :->[X >: B, Y](that: Transducer[X, Y]) = Pipe(this, that)
-
-import Process._
