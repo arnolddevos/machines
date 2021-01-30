@@ -27,13 +27,16 @@ import Direction._
 
 trait Cell[-A, +B]:
   def accept(a: A): Outcome
+  def open: Unit
   def close: Outcome
   def transferTo[B1 >: B](other: Cell[B1, Any]): Outcome
 
-class MachineCell[-A, +B](s: Machine[A, B, Any], fi: Int) extends Cell[A, B]:
+final class MachineCell[-A, +B](s: Machine[A, B, Any], fi: Int) extends Cell[A, B]:
   private type State = Either[InnerCell[A, B], InnerCell[Nothing, B]]
   private var state: State = Left(InnerCell(s))
   private var fanIn: Int = fi
+
+  def open: Unit = fanIn += 1
 
   def accept(a: A): Outcome =
     state match 
@@ -100,6 +103,12 @@ class InnerCell[-A, +B](s: Machine[A, B, Any]):
         else Blocked
       case _ => Blocked
 
+final class MultiCell[-A, +B](left: Cell[A, Any], right: Cell[Nothing, B]) extends Cell[A, B]:
+  def accept(a: A): Outcome = left.accept(a)
+  def open: Unit = left.open
+  def close: Outcome = left.close
+  def transferTo[B1 >: B](other: Cell[B1, Any]): Outcome = right.transferTo(other)
+
 abstract class Synapse:
   type A
   val left: Cell[Nothing, A]
@@ -124,7 +133,7 @@ object Synapse:
       val right = r
       var live = false
 
-def run(syns: Array[Synapse]): Unit =
+def run(syns: Iterable[Synapse]): Unit =
 
   def cycle: Unit =
     var live = false
@@ -134,3 +143,46 @@ def run(syns: Array[Synapse]): Unit =
 
   cycle
 
+def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
+  import Process._
+
+  val syns = mutable.Buffer[Synapse]()
+
+  case class Stage[-A, +B](left: Cell[A, Any], right: Cell[Nothing, B])
+  object Stage:
+    def apply[A, B](c: Cell[A, B]): Stage[A, B] = apply(c, c)
+    def apply[A, B](m: Machine[A, B, Any], n: Int): Stage[A, B] = apply(MachineCell(m, n))
+    val empty: Stage[Nothing, Nothing] = apply(Stop(()), 0)
+    def bufferStage[A](n: Int) = apply(buffer[A], n)
+
+  def stage[A, B, C](p: Process[A, B, Any]): Stage[A, B] =
+    p match 
+
+      case Run(m) => Stage(m, 1)
+
+      case Pipe(p1, p2) => 
+        val (s1, s2) = (stage(p1), stage(p2))
+        syns += Synapse(s1.right, s2.left)
+        Stage(s1.left, s2.right)
+
+      case Balance(ps:_*) =>
+        def recover[A](ps: Iterable[Consumer[A]]): Stage[A, Nothing] =
+          val b = Stage.bufferStage[A](1)
+          for p <- ps do  
+            val c = stage(p)
+            syns += Synapse(b.right, c.left)
+          Stage(b.left, Stage.empty.right)
+        recover(ps)
+        
+      case Concentrate(ps:_*) =>
+        def recover[B](ps: Iterable[Producer[B]]): Stage[Nothing, B] =
+          val b = Stage.bufferStage[B](ps.size)
+          for p <- ps do  
+            val c = stage(p)
+            syns += Synapse(c.right, b.left)
+          Stage(Stage.empty.left, b.right)
+        recover(ps)
+        
+
+  stage(system)
+  syns.toArray
