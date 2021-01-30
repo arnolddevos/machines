@@ -19,8 +19,8 @@ enum Process[-A, +B, +C]:
   case Concentrate[A](senders: Producer[A]*) extends Producer[A]
   case Ref[A, A1 >: A](tag: Tag[A1]) extends Consumer[A]
   case Deref[B, B1 <: B](tag: Tag[B1]) extends Producer[B]
-  case Output[A, A1 >: A](tag: Tag[A1]) extends Consumer[A]
-  case Input[B, B1 <: B](tag: Tag[B1]) extends Producer[B]
+  case Output[A](run: Option[A] => IOResult[Unit]) extends Consumer[A]
+  case Input[B](run: () => IOResult[B]) extends Producer[B]
   case System(processes: Process[Nothing, Nothing, Any]*) extends Process[Nothing, Nothing, Any]
 
   def :->[X >: B, Y](that: Transducer[X, Y]) = Pipe(this, that)

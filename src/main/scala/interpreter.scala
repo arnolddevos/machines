@@ -18,10 +18,10 @@ trait Cell[-A, +B]:
   def close: Outcome
   def transferTo[B1 >: B](other: Cell[B1, Any]): Outcome
 
-final class MachineCell[-A, +B](s: Machine[A, B, Any], fi: Int) extends Cell[A, B]:
+final class MachineCell[-A, +B](s: Machine[A, B, Any]) extends Cell[A, B]:
   private type State = Either[InnerCell[A, B], InnerCell[Nothing, B]]
   private var state: State = Left(InnerCell(s))
-  private var fanIn: Int = fi
+  private var fanIn: Int = 0
 
   def open: Unit = fanIn += 1
 
@@ -89,12 +89,6 @@ class InnerCell[-A, +B](s: Machine[A, B, Any]):
           FinalTransfer
         else Blocked
       case _ => Blocked
-
-// final class MultiCell[-A, +B](left: Cell[A, Any], right: Cell[Nothing, B]) extends Cell[A, B]:
-//   def accept(a: A): Outcome = left.accept(a)
-//   def open: Unit = left.open
-//   def close: Outcome = left.close
-//   def transferTo[B1 >: B](other: Cell[B1, Any]): Outcome = right.transferTo(other)
 
 abstract class Synapse:
   type A

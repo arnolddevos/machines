@@ -31,10 +31,12 @@ class HMap[K[_], V[_]]:
       v0
 
 case class Stage[-A, +B](left: Cell[A, Any], right: Cell[Nothing, B])
+
 object Stage:
   def apply[A, B](c: Cell[A, B]): Stage[A, B] = apply(c, c)
-  def apply[A, B](m: Machine[A, B, Any]): Stage[A, B] = apply(MachineCell(m, 0))
+  def apply[A, B](m: Machine[A, B, Any]): Stage[A, B] = apply(MachineCell(m))
   val empty: Stage[Nothing, Nothing] = apply(Stop(()))
+  val noop: Stage[Any, Nothing] = apply(Stop(()))
 
 def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
 
@@ -78,11 +80,21 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         recover(t)
 
       case Deref(t) => 
-        def recover[A](t: Tag[A]): Stage[Nothing, A] =
-          val b = topics.getOrAdd(t, Stage(buffer[A]))
+        def recover[B](t: Tag[B]): Stage[Nothing, B] =
+          val b = topics.getOrAdd(t, Stage(buffer[B]))
           Stage(Stage.empty.left, b.right)
         recover(t)
+
+      case Input(r) => Stage(InputCell(r))
+
+      case Output(r) => Stage(OutputCell(r))
           
+      case Reduce(_) => Stage.noop
+      case Monitor(_, _) => Stage.noop
+      case Repeat(_) => Stage.noop
+      case Concat(_:_*) => Stage.noop
+      case Broadcast(_, _:_*) => Stage.noop
+      case System(_:_*) => Stage.noop
 
   stage(system)
-  syns.toArray
+  syns.toIterable
