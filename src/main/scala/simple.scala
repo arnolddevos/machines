@@ -1,8 +1,7 @@
 package machines
+import Machine._
 
 type SimpleMachine[-A, +B] = Machine[A, B, Any]
-
-import Machine._
 
 def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B, p: (S, A) => Boolean): SimpleMachine[A, B] =
   class Plan:
@@ -39,4 +38,35 @@ def filter[A](p: A => Boolean) = filterMap((a: A)=> a, p)
 
 def collect[A, B](pf: PartialFunction[A, B]) = filterMap(pf, pf.isDefinedAt)
 
+def queue[A](backlog: Int): SimpleMachine[A, A] =
+  class Plan:
+    case class Queue(n: Int, left: List[A], right: List[A], closed: Boolean):
+      def machine: SimpleMachine[A, A] = 
+        if n > 0 && n < backlog then
+          Branch(React(this, enqueue, Defer(this, close)), Defer(this, dequeue))
+        else if n > 0 then dequeue(this)
+        else if closed then Stop(())
+        else React(this, enqueue, Defer(this, close))
 
+    val enqueue: (Queue, A) => SimpleMachine[A, A] =
+      (q, a) => Queue(q.n+1, a :: q.left, q.right, q.closed).machine
+    
+    val dequeue: Queue => SimpleMachine[A, A] =
+      q =>
+        def right = if q.right.nonEmpty then q.right else q.left.reverse
+        def left = if q.right.nonEmpty then q.left else Nil
+        Emit(right.head, Queue(q.n-1, left, right.tail, q.closed).machine)
+
+    val close: Queue => SimpleMachine[Nothing, A] =
+      q => q.copy(closed=true).machine
+
+  Plan().Queue(0, Nil, Nil, false).machine
+
+def buffer[A]: SimpleMachine[A, A] =
+
+  class Plan:
+    val empty: SimpleMachine[A, A] = React((), accept, stop)
+    val accept = (_: Any, a: A) => Emit(a, empty)
+    val stop = Stop(())
+
+  Plan().empty
