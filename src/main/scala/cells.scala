@@ -88,7 +88,8 @@ abstract class OneShotSynapse extends Synapse with CellPair:
             case Stop(a) =>
               right.state = f(s, a).seekBranch
               left.state = l1
-              live = false
+              live = true
+              closePending = true
               true
             case Error(t) => throw t
             case _ => false
