@@ -6,7 +6,8 @@ import Machine._
 
 trait Synapse:
   def live: Boolean
-  def fire: Boolean
+  final def fire: Boolean = if live then run else false
+  protected def run: Boolean
 
 trait CellPair:
   type A1
@@ -21,9 +22,8 @@ trait CellPair:
 abstract class CommonSynapse extends Synapse with CellPair:
   type B1 <: A2
   var live: Boolean = true
-  def fire: Boolean = if live then transfer else false
 
-  def transfer: Boolean =
+  def run: Boolean =
 
     val r1 = right.state.seekReact
     
@@ -38,6 +38,7 @@ abstract class CommonSynapse extends Synapse with CellPair:
           case Stop(_) =>
             right.fanIn -= 1
             if right.fanIn == 0 then right.state = r2.seekBranch
+            left.state = l1
             live = false
             true
           case _ => false
@@ -67,9 +68,8 @@ abstract class OneShotSynapse extends Synapse with CellPair:
   type C1 <: A2
   var live: Boolean = true
   var closePending = false
-  def fire: Boolean = if live then transfer else false
 
-  def transfer: Boolean =
+  def run: Boolean =
 
     val r1 = right.state.seekReact
     
@@ -85,6 +85,7 @@ abstract class OneShotSynapse extends Synapse with CellPair:
           l1 match
             case Stop(a) =>
               right.state = f(s, a).seekBranch
+              left.state = l1
               live = false
               true
             case _ => false
@@ -94,7 +95,6 @@ abstract class OneShotSynapse extends Synapse with CellPair:
         live = false
         true
       case _ => false
-      
 
 object OneShotSynapse:
   def apply[Al, Bl, Cl <: Ar, Ar, Br, Cr](l: Cell[Al, Bl, Cl], r: Cell[Ar, Br, Cr]) = 
