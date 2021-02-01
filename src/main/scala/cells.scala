@@ -20,7 +20,7 @@ trait CellPair:
 
 abstract class CommonSynapse extends Synapse with CellPair:
   type B1 <: A2
-  var live: Boolean
+  var live: Boolean = true
   def fire: Boolean = if live then transfer else false
 
   def transfer: Boolean =
@@ -37,8 +37,8 @@ abstract class CommonSynapse extends Synapse with CellPair:
             true
           case Stop(_) =>
             right.fanIn -= 1
-            live = false
             if right.fanIn == 0 then right.state = r2.seekBranch
+            live = false
             true
           case _ => false
       case Stop(_) => 
@@ -60,13 +60,12 @@ object CommonSynapse:
       type C2 = Cr
       val left = l
       val right = r
-      var live = true
       right.fanIn += 1
 
 
 abstract class OneShotSynapse extends Synapse with CellPair:
   type C1 <: A2
-  var live: Boolean
+  var live: Boolean = true
   def fire: Boolean = if live then transfer else false
 
   def transfer: Boolean =
@@ -79,7 +78,7 @@ abstract class OneShotSynapse extends Synapse with CellPair:
         l1 match
           case Stop(a) =>
             right.state = f(s, a).seekBranch
-            right.fanIn -= 1
+            right.fanIn -= 1 // TBD close the right cell
             live = false
             true
           case _ => false
@@ -102,6 +101,5 @@ object OneShotSynapse:
       type C2 = Cr
       val left = l
       val right = r
-      var live = true
       right.fanIn += 1
 
