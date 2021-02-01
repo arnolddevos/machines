@@ -41,12 +41,14 @@ abstract class CommonSynapse extends Synapse with CellPair:
             left.state = l1
             live = false
             true
+          case Error(t) => throw t
           case _ => false
       case Stop(_) => 
         right.fanIn -= 1
         right.state = r1
         live = false
         true
+      case Error(t) => throw t
       case _ => false
       
 
@@ -88,12 +90,14 @@ abstract class OneShotSynapse extends Synapse with CellPair:
               left.state = l1
               live = false
               true
+            case Error(t) => throw t
             case _ => false
       case Stop(_) => 
         right.fanIn -= 1
         right.state = r1
         live = false
         true
+      case Error(t) => throw t
       case _ => false
 
 object OneShotSynapse:
