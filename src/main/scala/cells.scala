@@ -66,6 +66,7 @@ object CommonSynapse:
 abstract class OneShotSynapse extends Synapse with CellPair:
   type C1 <: A2
   var live: Boolean = true
+  var closePending = false
   def fire: Boolean = if live then transfer else false
 
   def transfer: Boolean =
@@ -74,14 +75,19 @@ abstract class OneShotSynapse extends Synapse with CellPair:
     
     r1 match
       case React(s, f, r2) =>
-        val l1 = left.state.seekEmitStop
-        l1 match
-          case Stop(a) =>
-            right.state = f(s, a).seekBranch
-            right.fanIn -= 1 // TBD close the right cell
-            live = false
-            true
-          case _ => false
+        if closePending then
+          right.fanIn -= 1
+          if right.fanIn == 0 then right.state = r2.seekBranch
+          live = false
+          true
+        else
+          val l1 = left.state.seekEmitStop
+          l1 match
+            case Stop(a) =>
+              right.state = f(s, a).seekBranch
+              live = false
+              true
+            case _ => false
       case Stop(_) => 
         right.fanIn -= 1
         right.state = r1
