@@ -13,19 +13,23 @@ enum OutputRequest[+A]:
   case SendOutput(a: A)
   case CloseOutput 
 
+import OutputRequest._
+
 enum OutputResult:
   case OutputComplete
   case OutputError(t: Throwable)
 
-abstract class Sensor extends Synapse:
+import OutputResult._
+
+trait CellRef:
   type A
   type B
   type C
-  val effect: () => InputResult[A] 
   val cell: Cell[A, B, C]
-  var live = true
 
-  def fire: Boolean = if live then run else false
+abstract class Sensor extends Synapse with CellRef:
+  val effect: () => InputResult[A] 
+  var live = true
 
   def run: Boolean = 
 
@@ -41,9 +45,9 @@ abstract class Sensor extends Synapse:
             if cell.fanIn == 0 then cell.state = r2.seekBranch
             live = false
             true
-          case _ => false
+          case InputError(t) => 
+            throw t
       case _ => false
-
 
 object Sensor:
   def apply[A1, B1, C1](e: () => InputResult[A1], c:  Cell[A1, B1, C1]) =
@@ -54,3 +58,37 @@ object Sensor:
       val effect = e
       val cell = c
       cell.fanIn += 1
+
+abstract class Motor extends Synapse with CellRef:
+  val effect: OutputRequest[B] => OutputResult 
+  var live = true
+
+  def run: Boolean = 
+
+    val l1 = cell.state.seekEmit
+    l1 match
+      case Emit(b, l2) =>
+        effect(SendOutput(b)) match
+          case OutputComplete =>
+            cell.state = l2.seekBranch
+            true
+          case OutputError(t) =>
+            throw t
+      case Stop(_) =>
+        effect(CloseOutput) match
+          case OutputComplete => 
+            cell.state = l1
+            live = false
+            true
+          case OutputError(t) =>
+            throw t
+      case _ => false
+
+object Motor:
+  def apply[A1, B1, C1](e: OutputRequest[B1] => OutputResult, c:  Cell[A1, B1, C1]) =
+    new Motor:
+      type A = A1
+      type B = B1
+      type C = C1
+      val effect = e
+      val cell = c
