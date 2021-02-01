@@ -107,12 +107,19 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         syns += Sensor(e, b)
         Stage(Stage.empty.left, b)
 
-      case Output(r) => Stage.bottom
+      case Output(e) => 
+        val b = Cell(buffer[A])
+        syns += Motor(e, b)
+        Stage(b, Stage.empty.right)
 
       case Repeat(_) => Stage.bottom
       case Concat(_:_*) => Stage.bottom
       case Broadcast(_, _:_*) => Stage.bottom
-      case System(_:_*) => Stage.empty
+
+      case System(ps:_*) => 
+        for p <- ps 
+        do stage(p)
+        Stage.empty
 
   stage(system)
   syns.toIterable
