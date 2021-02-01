@@ -123,3 +123,13 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
 
   stage(system)
   syns.toIterable
+
+def compileAndRun(system: Process[Nothing, Nothing, Any]): Unit =
+  val syns = compile(system)
+
+  def cycle: Unit =
+    var changes = false
+    for s <- syns do changes ||= s.fire
+    if changes then cycle
+
+  cycle
