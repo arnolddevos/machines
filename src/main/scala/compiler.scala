@@ -56,8 +56,8 @@ object Stage:
 def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
 
   val syns = mutable.Buffer[Synapse]()
-  type Unistage[A] = Stage[A, A, Any]
-  val topics = HMap[Tag, Unistage]
+  type Buffer[A] = Cell[A, A, Any]
+  val topics = HMap[Tag, Buffer]
 
   def stage[A, B, C](p: Process[A, B, C]): Stage[A, B, C] =
     p match 
@@ -70,43 +70,45 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         Stage(s1.left, s2.right)
 
       case Balance(ps:_*) =>
-        def recover[A](ps: Iterable[Consumer[A]]): Stage[A, Nothing, Any] =
-          val b = Stage(buffer[A])
-          for p <- ps do  
-            val c = stage(p)
-            syns += CommonSynapse(b.right, c.left)
-          Stage(b.left, Stage.empty.right)
-        recover(ps)
+        val b = Cell(buffer[A])
+        for p <- ps do  
+          val c = stage(p)
+          syns += CommonSynapse(b, c.left)
+        Stage(b, Stage.empty.right)
         
       case Concentrate(ps:_*) =>
-        def recover[B](ps: Iterable[Producer[B]]): Stage[Nothing, B, Any] =
-          val b = Stage(buffer[B])
-          for p <- ps do  
-            val c = stage(p)
-            syns += CommonSynapse(c.right, b.left)
-          Stage(Stage.empty.left, b.right)
-        recover(ps)
+        val b = Cell(buffer[B])
+        for p <- ps do  
+          val c = stage(p)
+          syns += CommonSynapse(c.right, b)
+        Stage(Stage.empty.left, b)
 
       case Ref(t) => 
-        def recover[A](t: Tag[A]): Stage[A, Nothing, Any] =
-          val b = topics.getOrAdd(t, Stage(buffer[A]))
-          Stage(b.left, Stage.empty.right)
-        recover(t)
+        val b = topics.getOrAdd(t, Cell(buffer[A]))
+        Stage(b, Stage.empty.right)
 
       case Deref(t) => 
-        def recover[B](t: Tag[B]): Stage[Nothing, B, Any] =
-          val b = topics.getOrAdd(t, Stage(buffer[B]))
-          Stage(Stage.empty.left, b.right)
-        recover(t)
+        val b = topics.getOrAdd(t, Cell(buffer[B]))
+        Stage(Stage.empty.left, b)
+
+      case Monitor(p1, p2) => 
+        val (s1, s2) = (stage(p1), stage(p2))
+        syns += OneShotSynapse(s1.right, s2.left)
+        Stage(s1.left, s1.right)
+
+      case Reduce(p) => 
+        val b = Cell(buffer[B])
+        val s = stage(p)
+        syns += OneShotSynapse(s.right, b)
+        Stage(s.left, b)
 
       case Input(r) => Stage.bottom
       case Output(r) => Stage.bottom
-      case Reduce(_) => Stage.bottom
-      case Monitor(_, _) => Stage.bottom
+      
       case Repeat(_) => Stage.bottom
       case Concat(_:_*) => Stage.bottom
       case Broadcast(_, _:_*) => Stage.bottom
-      case System(_:_*) => Stage.bottom
+      case System(_:_*) => Stage.empty
 
   stage(system)
   syns.toIterable
