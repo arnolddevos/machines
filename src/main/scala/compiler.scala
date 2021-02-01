@@ -102,9 +102,13 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         syns += OneShotSynapse(s.right, b)
         Stage(s.left, b)
 
-      case Input(r) => Stage.bottom
+      case Input(e) => 
+        val b = Cell(buffer[B])
+        syns += Sensor(e, b)
+        Stage(Stage.empty.left, b)
+
       case Output(r) => Stage.bottom
-      
+
       case Repeat(_) => Stage.bottom
       case Concat(_:_*) => Stage.bottom
       case Broadcast(_, _:_*) => Stage.bottom
