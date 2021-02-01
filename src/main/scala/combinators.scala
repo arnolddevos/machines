@@ -13,14 +13,14 @@ enum Process[-A, +B, +C]:
   case Monitor[A, B, C](process: Process[A, B, C], supervisor: Consumer[C]) extends Transducer[A, B]
   case Repeat[A, B](process: Transducer[A, B]) extends Transducer[A, B]
   case Concat[A, B](processes: Transducer[A, B]*) extends Transducer[A, B]
-  case Pipe[A, B, X](stage1: Transducer[A, X], stage2: Transducer[X, B]) extends Transducer[A, B]
+  case Pipe[A, B, X, C](stage1: Transducer[A, X], stage2: Process[X, B, C]) extends Process[A, B, C]
   case Broadcast[A](backlog: Int, receivers: Consumer[A]*) extends Consumer[A]
   case Balance[A](receivers: Consumer[A]*) extends Consumer[A]
   case Concentrate[A](senders: Producer[A]*) extends Producer[A]
   case Ref[A, A1 >: A](tag: Tag[A1]) extends Consumer[A]
   case Deref[B, B1 <: B](tag: Tag[B1]) extends Producer[B]
-  case Output[A](run: Option[A] => IOResult[Unit]) extends Consumer[A]
-  case Input[B](run: () => IOResult[B]) extends Producer[B]
+  case Output[A](run: OutputRequest[A] => OutputResult) extends Consumer[A]
+  case Input[B](run: () => InputResult[B]) extends Producer[B]
   case System(processes: Process[Nothing, Nothing, Any]*) extends Process[Nothing, Nothing, Any]
 
   def :->[X >: B, Y](that: Transducer[X, Y]) = Pipe(this, that)

@@ -57,7 +57,7 @@ def queue[A](backlog: Int): SimpleMachine[A, A] =
         def left = if q.right.nonEmpty then q.left else Nil
         Emit(right.head, Queue(q.n-1, left, right.tail, q.closed).machine)
 
-    val close: Queue => SimpleMachine[Nothing, A] =
+    val close: Queue => SimpleMachine[A, A] =
       q => q.copy(closed=true).machine
 
   Plan().Queue(0, Nil, Nil, false).machine
