@@ -42,11 +42,13 @@ def queue[A](backlog: Int): SimpleMachine[A, A] =
   class Plan:
     case class Queue(n: Int, left: List[A], right: List[A], closed: Boolean):
       def machine: SimpleMachine[A, A] = 
-        if n > 0 && n < backlog then
-          Branch(React(this, enqueue, Defer(this, close)), Defer(this, dequeue))
-        else if n > 0 then dequeue(this)
-        else if closed then Stop(())
-        else React(this, enqueue, Defer(this, close))
+        if closed then
+          if n > 0 then dequeue(this) else Stop(())
+        else
+          if n > 0 && n < backlog then
+            Branch(React(this, enqueue, Defer(this, close)), Defer(this, dequeue))
+          else if n > 0 then dequeue(this)
+          else React(this, enqueue, Defer(this, close))
 
     val enqueue: (Queue, A) => SimpleMachine[A, A] =
       (q, a) => Queue(q.n+1, a :: q.left, q.right, q.closed).machine
