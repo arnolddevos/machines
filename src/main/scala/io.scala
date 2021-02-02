@@ -43,11 +43,10 @@ abstract class Sensor extends Synapse with CellRef:
       case React(s, f, r2) =>
         effect(ReadInput) match
           case InputReceived(a) =>
-            cell.state = f(s, a).seekBranch
+            cell.accept(f, s, a)
             true
           case InputClosed =>
-            cell.fanIn -= 1
-            if cell.fanIn == 0 then cell.state = r2.seekBranch
+            cell.close(r2)
             live = false
             true
           case InputError(t) => throw t
@@ -62,7 +61,7 @@ object Sensor:
       type C = C1
       val effect = e
       val cell = c
-      cell.fanIn += 1
+      cell.open
 
 abstract class Motor extends Synapse with CellRef:
   val effect: OutputRequest[B] => OutputResult 
@@ -75,13 +74,13 @@ abstract class Motor extends Synapse with CellRef:
       case Emit(b, l2) =>
         effect(SendOutput(b)) match
           case OutputComplete =>
-            cell.state = l2.seekBranch
+            cell.continue(l2)
             true
           case OutputError(t) => throw t
-      case Stop(_) =>
+      case Stop(x) =>
         effect(CloseOutput) match
           case OutputComplete => 
-            cell.state = l1
+            cell.stop(x)
             live = false
             true
           case OutputError(t) => throw t

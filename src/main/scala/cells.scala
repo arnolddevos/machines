@@ -1,8 +1,20 @@
 package machines
 
-class Cell[A, B, C](var state: Machine[A, B, C], var fanIn: Int = 0)
-
 import Machine._
+
+class Cell[A, B, C](private var track: Machine[A, B, C], private var fanIn: Int = 0):
+  def state = track
+  def accept[S](f: (S, A) => Machine[A, B, C], s: S, a: A): Unit =
+    track = f(s, a).seekBranch
+  def open: Unit =
+    fanIn += 1
+  def close(m: Machine[A, B, C]): Unit =
+    fanIn -= 1
+    if fanIn == 0 then track = m.seekBranch
+  def stop(c: C): Unit =
+    track = Stop(c)
+  def continue(m: Machine[A, B, C]): Unit =
+    track = m.seekBranch
 
 trait Synapse:
   def live: Boolean
@@ -18,7 +30,7 @@ trait CellPair:
   type C2
   val left: Cell[A1, B1, C1]
   val right: Cell[A2, B2, C2]
-
+   
 abstract class CommonSynapse extends Synapse with CellPair:
   type B1 <: A2
   var live: Boolean = true
@@ -32,20 +44,18 @@ abstract class CommonSynapse extends Synapse with CellPair:
         val l1 = left.state.seekEmit
         l1 match
           case Emit(a, l2) =>
-            right.state = f(s, a).seekBranch
-            left.state  = l2.seekBranch
+            right.accept(f, s, a)
+            left.continue(l2)
             true
-          case Stop(_) =>
-            right.fanIn -= 1
-            if right.fanIn == 0 then right.state = r2.seekBranch
-            left.state = l1
+          case Stop(x) =>
+            right.close(r2)
+            left.stop(x)
             live = false
             true
           case Error(t) => throw t
           case _ => false
-      case Stop(_) => 
-        right.fanIn -= 1
-        right.state = r1
+      case Stop(x) => 
+        right.stop(x)
         live = false
         true
       case Error(t) => throw t
@@ -63,7 +73,7 @@ object CommonSynapse:
       type C2 = Cr
       val left = l
       val right = r
-      right.fanIn += 1
+      right.open
 
 
 abstract class OneShotSynapse extends Synapse with CellPair:
@@ -78,24 +88,22 @@ abstract class OneShotSynapse extends Synapse with CellPair:
     r1 match
       case React(s, f, r2) =>
         if closePending then
-          right.fanIn -= 1
-          if right.fanIn == 0 then right.state = r2.seekBranch
+          right.close(r2)
           live = false
           true
         else
           val l1 = left.state.seekEmitStop
           l1 match
             case Stop(a) =>
-              right.state = f(s, a).seekBranch
-              left.state = l1
+              right.accept(f, s, a)
+              left.stop(a)
               live = true
               closePending = true
               true
             case Error(t) => throw t
             case _ => false
-      case Stop(_) => 
-        right.fanIn -= 1
-        right.state = r1
+      case Stop(x) => 
+        right.stop(x)
         live = false
         true
       case Error(t) => throw t
@@ -112,5 +120,5 @@ object OneShotSynapse:
       type C2 = Cr
       val left = l
       val right = r
-      right.fanIn += 1
+      right.open
 
