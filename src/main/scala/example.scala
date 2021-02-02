@@ -9,9 +9,8 @@ val c = Stop(12)
 val e = Error(new RuntimeException("oh"))
 
 
-object Doubler extends Actor[Int, Int]:
+object Doubler extends Actor[Int, Int, Any]:
   def start = react { i => send(i*2)(start) }
 
-object Incrementer extends Actor[Int, Int]:
+object Incrementer extends Actor[Int, Int, Any]:
   def start = react { i => send(i+1)(start) }
-
