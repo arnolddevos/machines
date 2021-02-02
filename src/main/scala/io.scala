@@ -9,6 +9,11 @@ enum InputResult[+A]:
 
 import InputResult._
 
+enum InputRequest:
+  case ReadInput, CloseInput
+
+import InputRequest._
+
 enum OutputRequest[+A]:
   case SendOutput(a: A)
   case CloseOutput 
@@ -28,7 +33,7 @@ trait CellRef:
   val cell: Cell[A, B, C]
 
 abstract class Sensor extends Synapse with CellRef:
-  val effect: () => InputResult[A] 
+  val effect: InputRequest => InputResult[A] 
   var live = true
 
   def run: Boolean = 
@@ -36,7 +41,7 @@ abstract class Sensor extends Synapse with CellRef:
     val r1 = cell.state.seekReact
     r1 match
       case React(s, f, r2) =>
-        effect() match
+        effect(ReadInput) match
           case InputReceived(a) =>
             cell.state = f(s, a).seekBranch
             true
@@ -45,12 +50,12 @@ abstract class Sensor extends Synapse with CellRef:
             if cell.fanIn == 0 then cell.state = r2.seekBranch
             live = false
             true
-          case InputError(t) => 
-            throw t
+          case InputError(t) => throw t
+      case Error(t) => throw t
       case _ => false
 
 object Sensor:
-  def apply[A1, B1, C1](e: () => InputResult[A1], c:  Cell[A1, B1, C1]) =
+  def apply[A1, B1, C1](e: InputRequest => InputResult[A1], c:  Cell[A1, B1, C1]) =
     new Sensor:
       type A = A1
       type B = B1
@@ -72,16 +77,15 @@ abstract class Motor extends Synapse with CellRef:
           case OutputComplete =>
             cell.state = l2.seekBranch
             true
-          case OutputError(t) =>
-            throw t
+          case OutputError(t) => throw t
       case Stop(_) =>
         effect(CloseOutput) match
           case OutputComplete => 
             cell.state = l1
             live = false
             true
-          case OutputError(t) =>
-            throw t
+          case OutputError(t) => throw t
+      case Error(t) => throw t
       case _ => false
 
 object Motor:
