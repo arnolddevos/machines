@@ -86,9 +86,20 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         syns += Motor(e, b)
         Stage(b, Stage.empty.right)
 
+      case Broadcast(backlog, ps:_*) => 
+        val b = Cell(buffer[A])
+        val cs = 
+          for p <- ps 
+          yield 
+            val s = stage(p)
+            val c = Cell(if backlog > 1 then queue[A](backlog) else buffer[A])
+            syns += CommonSynapse(c, s.left)
+            c
+        syns += BroadcastSynapse(b, cs)
+        Stage(b, Stage.empty.right)
+
       case Repeat(_) => Stage.bottom
       case Concat(_:_*) => Stage.bottom
-      case Broadcast(_, _:_*) => Stage.bottom
 
       case System(ps:_*) => 
         for p <- ps 
