@@ -36,22 +36,8 @@ abstract class Sensor extends Synapse with CellRef:
   val effect: InputRequest => InputResult[A] 
   var live = true
 
-  def run: Boolean = 
-
-    val r1 = cell.state.seekReact
-    r1 match
-      case React(s, f, r2) =>
-        effect(ReadInput) match
-          case InputReceived(a) =>
-            cell.accept(f, s, a)
-            true
-          case InputClosed =>
-            cell.close(r2)
-            live = false
-            true
-          case InputError(t) => throw t
-      case Error(t) => throw t
-      case _ => false
+  def run: Boolean = false
+    
 
 object Sensor:
   def apply[A1, B1, C1](e: InputRequest => InputResult[A1], c:  Cell[A1, B1, C1]) =
@@ -69,22 +55,20 @@ abstract class Motor extends Synapse with CellRef:
 
   def run: Boolean = 
 
-    val l1 = cell.state.seekEmit
-    l1 match
+    cell.state.seekEmit match
       case Emit(b, l2) =>
         effect(SendOutput(b)) match
           case OutputComplete =>
-            cell.continue(l2)
+            cell.continue(l2.seekBranch)
             true
           case OutputError(t) => throw t
-      case Stop(x) =>
+      case s @ Stop(_) =>
         effect(CloseOutput) match
           case OutputComplete => 
-            cell.stop(x)
+            cell.continue(s)
             live = false
             true
           case OutputError(t) => throw t
-      case Error(t) => throw t
       case _ => false
 
 object Motor:
@@ -95,3 +79,4 @@ object Motor:
       type C = C1
       val effect = e
       val cell = c
+      cell.subscribe

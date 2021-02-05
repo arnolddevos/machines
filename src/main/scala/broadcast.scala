@@ -7,6 +7,7 @@ enum BroadcastState[A, B, C]:
 
 import BroadcastState._
 import Machine._
+import Reaction._
 
 abstract class BroadcastSynapse extends Synapse:
   type A1  
@@ -17,57 +18,47 @@ abstract class BroadcastSynapse extends Synapse:
   type C2
   val left: Cell[A1, B1, C1]
   var right: BroadcastState[A2, B2, C2]
-  def live = right match 
-    case Quiescent(Nil) => false
-    case _ => true
-
-  def sendToCell(cell: Cell[A2, B2, C2], state: BroadcastState[A2, B2, C2]): Boolean =
-    val r1 = cell.state.seekReact
-    r1 match 
-      case React(s, f, r2) =>
-        state match
-          case Sending(a, _, _) => cell.accept(f, s, a)
-          case Closing(_)       => cell.close(r2)
-          case Quiescent(_)     =>
-        true
-      case Stop(x) =>
-        cell.stop(x)
-        true
-      case Error(t) => throw t
-      case _ => false
+  var live = false
 
   def broadcast(s: BroadcastState[A2, B2, C2], failed: List[Cell[A2, B2, C2]]=Nil): BroadcastState[A2, B2, C2] =
     s match
       case Sending(a, c :: pending, succeeded) =>
-        if sendToCell(c, s) then 
-          broadcast(Sending(a, pending, c :: succeeded), failed)
-        else
-          broadcast(Sending(a, pending, succeeded), c :: failed)
+        c.accept(a) match 
+          case Accepted => broadcast(Sending(a, pending, c :: succeeded), failed)
+          case Rejected => broadcast(Sending(a, pending, succeeded), c :: failed)
+          case Blocked  => broadcast(Sending(a, pending, succeeded), failed)
       case Closing(c :: pending) =>
-        if sendToCell(c, s) then 
-          broadcast(Closing(pending), failed)
-        else
-          broadcast(Closing(pending), c :: failed)
+        c.close match 
+          case Accepted | Blocked => broadcast(Closing(pending), failed)
+          case Rejected => broadcast(Closing(pending), c :: failed)
       case Sending(a, Nil, succeeded) =>
           if failed.isEmpty then Quiescent(succeeded)
           else Sending(a, failed, succeeded)
       case Closing(Nil) =>
           if failed.isEmpty then Quiescent(Nil)
           else Closing(failed)    
-      case s => s 
+      case s @ Quiescent(_) => s 
 
   def run: Boolean =
     val s = right match
       case s @ Quiescent(cells) =>
-        val l1 = left.state.seekEmit
-        l1 match 
-          case Emit(b, l2) =>
-            left.continue(l2)
-            broadcast(Sending(b, cells, Nil))
-          case Stop(x) =>
-            left.stop(x)
-            broadcast(Closing(cells))
-          case Error(t) => throw t
+        left.state.seekEmit match 
+          case l @ Emit(b, c) =>
+            if cells.isEmpty then 
+              left.block(l)
+              live = false
+              s
+            else
+              left.continue(c.seekBranch)
+              broadcast(Sending(b, cells, Nil))
+          case l @ Stop(_) =>
+            if cells.isEmpty then
+              left.continue(l)
+              live = false
+              s
+            else
+              left.continue(l)
+              broadcast(Closing(cells))
           case _ => s
       case s =>
         broadcast(s)
@@ -88,3 +79,4 @@ object BroadcastSynapse:
       val left = l
       var right = Quiescent(r.toList)
       for c <- r do c.open
+      left.subscribe

@@ -2,19 +2,58 @@ package machines
 
 import Machine._
 
-class Cell[A, B, C](private var track: Machine[A, B, C], private var fanIn: Int = 0):
-  def state = track
-  def accept[S](f: (S, A) => Machine[A, B, C], s: S, a: A): Unit =
-    track = f(s, a).seekBranch
+enum Reaction:
+  case Accepted, Rejected, Blocked
+  
+import Reaction._
+
+class Cell[A, B, C](state0: Machine[A, B, C]):
+
+  private var state_   = state0
+  private var fanIn    = 0
+  private var fanOut   = 0
+
+  def state = state_
+
+  private def blockOrRejectWith(basis: Machine[A, B, C]): Reaction =
+    basis match 
+      case Stop(_) | Error(_) => 
+        state_ = basis
+        Blocked
+      case Emit(_, _) if fanOut == 0 => 
+        state_ = basis
+        Blocked
+      case _ => Rejected
+
+  def accept[A1 <: A](a: A1): Reaction =
+    state.seekReact match 
+      case React(s, f, _) => 
+        state_ = f(s, a).seekBranch
+        Accepted
+      case s => 
+        blockOrRejectWith(s)
+
+  def close: Reaction =
+    state.seekReact match 
+      case React(_, _, c) => 
+        fanIn -= 1
+        if fanIn == 0 then state_ = c.seekBranch
+        Accepted
+      case s => 
+        blockOrRejectWith(s)
+
+  def continue(proposal: Machine[A, B, C]): Unit =
+    state_ = proposal
+
+  def block(proposal: Machine[A, B, C]): Unit =
+    state_ = proposal
+    fanOut -= 1
+  
   def open: Unit =
     fanIn += 1
-  def close(m: Machine[A, B, C]): Unit =
-    fanIn -= 1
-    if fanIn == 0 then track = m.seekBranch
-  def stop(c: C): Unit =
-    track = Stop(c)
-  def continue(m: Machine[A, B, C]): Unit =
-    track = m.seekBranch
+
+  def subscribe: Unit =
+    fanOut += 1
 
 trait Synapse:
   def live: Boolean
@@ -34,33 +73,33 @@ trait CellPair:
 abstract class CommonSynapse extends Synapse with CellPair:
   type B1 <: A2
   var live: Boolean = true
-
-  def run: Boolean =
-
-    val r1 = right.state.seekReact
     
-    r1 match
-      case React(s, f, r2) =>
-        val l1 = left.state.seekEmit
-        l1 match
-          case Emit(a, l2) =>
-            right.accept(f, s, a)
-            left.continue(l2)
-            true
-          case Stop(x) =>
-            right.close(r2)
-            left.stop(x)
-            live = false
-            true
-          case Error(t) => throw t
-          case _ => false
-      case Stop(x) => 
-        right.stop(x)
-        live = false
-        true
-      case Error(t) => throw t
-      case _ => false
-      
+  def run: Boolean =
+    val proposal = left.state.seekEmit
+    val reaction = 
+      proposal match 
+        case Emit(a, _) => right.accept(a)
+        case Stop(_)    => right.close
+        case _          => Rejected
+  
+    live = 
+      reaction match 
+        case Accepted =>
+          proposal match 
+            case Emit(_, c) =>
+              left.continue(c.seekBranch)
+              true
+            case _ =>
+              left.continue(proposal)
+              false
+  
+        case Blocked => 
+          left.block(proposal)
+          false
+  
+        case Rejected => true
+  
+    reaction == Accepted || reaction == Blocked
 
 object CommonSynapse:
   def apply[Al, Bl <: Ar, Cl, Ar, Br, Cr](l: Cell[Al, Bl, Cl], r: Cell[Ar, Br, Cr]) = 
@@ -73,41 +112,41 @@ object CommonSynapse:
       type C2 = Cr
       val left = l
       val right = r
+      left.subscribe
       right.open
 
 
 abstract class OneShotSynapse extends Synapse with CellPair:
   type C1 <: A2
   var live: Boolean = true
-  var closePending = false
+  var closing = false
 
   def run: Boolean =
+    val proposal = left.state.seekEmitStop
 
-    val r1 = right.state.seekReact
-    
-    r1 match
-      case React(s, f, r2) =>
-        if closePending then
-          right.close(r2)
-          live = false
-          true
-        else
-          val l1 = left.state.seekEmitStop
-          l1 match
-            case Stop(a) =>
-              right.accept(f, s, a)
-              left.stop(a)
-              live = true
-              closePending = true
-              true
-            case Error(t) => throw t
-            case _ => false
-      case Stop(x) => 
-        right.stop(x)
-        live = false
-        true
-      case Error(t) => throw t
-      case _ => false
+    val reaction = 
+      if closing then right.close
+      else
+        proposal match 
+          case Stop(a) => right.accept(a)
+          case _       => Rejected
+  
+    live = 
+      reaction match 
+        case Accepted =>
+          if closing then false
+          else
+            left.continue(proposal)
+            closing = true
+            true 
+  
+        case Blocked => 
+          left.block(proposal)
+          false
+  
+        case Rejected => true
+  
+    reaction == Accepted || reaction == Blocked
 
 object OneShotSynapse:
   def apply[Al, Bl, Cl <: Ar, Ar, Br, Cr](l: Cell[Al, Bl, Cl], r: Cell[Ar, Br, Cr]) = 
