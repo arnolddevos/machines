@@ -20,8 +20,9 @@ abstract class BroadcastSynapse extends Synapse:
   var right: BroadcastState[A2, B2, C2]
   var live = false
 
-  def broadcast(s: BroadcastState[A2, B2, C2], failed: List[Cell[A2, B2, C2]]=Nil): BroadcastState[A2, B2, C2] =
-    s match
+  @annotation.tailrec
+  final def broadcast(state: BroadcastState[A2, B2, C2], failed: List[Cell[A2, B2, C2]]=Nil): BroadcastState[A2, B2, C2] =
+    state match
       case Sending(a, c :: pending, succeeded) =>
         c.accept(a) match 
           case Accepted => broadcast(Sending(a, pending, c :: succeeded), failed)
@@ -37,10 +38,10 @@ abstract class BroadcastSynapse extends Synapse:
       case Closing(Nil) =>
           if failed.isEmpty then Quiescent(Nil)
           else Closing(failed)    
-      case s @ Quiescent(_) => s 
+      case Quiescent(_) => state 
 
   def run: Boolean =
-    val s = right match
+    val state = right match
       case s @ Quiescent(cells) =>
         left.state.seekEmit match 
           case l @ Emit(b, c) =>
@@ -63,8 +64,8 @@ abstract class BroadcastSynapse extends Synapse:
       case s =>
         broadcast(s)
 
-    val changed = right != s
-    right = s
+    val changed = right != state
+    right = state
     changed
 
 object BroadcastSynapse:
