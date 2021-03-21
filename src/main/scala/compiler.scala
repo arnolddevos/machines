@@ -4,39 +4,40 @@ import scala.collection.mutable
 import Machine._
 import Process._
 
-abstract class Stage[-A, +B, +C] extends CellPair:
+abstract class Stage[-A, +B, +D] extends CellPair:
   type A1 >: A
   type B2 <: B
-  type C2 <: C
+  type D2 <: D
 
 object Stage:
-  def apply[Al, Bl, Cl, Ar, Br, Cr](l: Cell[Al, Bl, Cl], r: Cell[Ar, Br, Cr]) = 
-    new Stage[Al, Br, Cr]:
+  def apply[Al, Bl, Dl, Ar, Br, Dr](l: Cell[Al, Bl, Dl], r: Cell[Ar, Br, Dr]) = 
+    new Stage[Al, Br, Dr]:
       type A1 = Al
       type B1 = Bl
-      type C1 = Cl
+      type D1 = Dl
       type A2 = Ar
       type B2 = Br
-      type C2 = Cr
+      type D2 = Dr
       val left = l
       val right = r
 
-  def apply[A, B, C](c: Cell[A, B, C]): Stage[A, B, C] = apply(c, c)
-  def apply[A, B, C](m: Machine[A, B, C]): Stage[A, B, C] = apply(Cell(m))
-  val empty: Stage[Nothing, Nothing, Any] = apply(Stop(()))
-  val top: Stage[Nothing, Any, Any] = apply(Stop(()))
+  def apply[A, B, D](d: Cell[A, B, D]): Stage[A, B, D] = apply(d, d)
+  def apply[A, B, D](m: Machine[A, B, Pure, D]): Stage[A, B, D] = apply(Cell(m, Pure))
+  val empty: Stage[Nothing, Nothing, Any] = apply(Return(()))
+  val top: Stage[Nothing, Any, Any] = apply(Return(()))
   val bottom: Stage[Any, Nothing, Nothing] = apply(Error(new NotImplementedError))
 
-def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
+def compile[C <: Pure](system: Process[Nothing, Nothing, C, Any], c: C): Iterable[Synapse] =
 
   val syns = mutable.Buffer[Synapse]()
   type Buffer[A] = Cell[A, A, Any]
   val topics = HMap[Tag, Buffer]
+  def bufferCell[A] = Cell(buffer[A], Pure)
 
-  def stage[A, B, C](p: Process[A, B, C]): Stage[A, B, C] =
+  def stage[A, B, D](p: Process[A, B, C, D]): Stage[A, B, D] =
     p match 
 
-      case Run(m) => Stage(m)
+      case Run(m) => Stage(Cell(m, c))
 
       case Pipe(p1, p2) => 
         val (s1, s2) = (stage(p1), stage(p2))
@@ -44,25 +45,25 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         Stage(s1.left, s2.right)
 
       case Balance(ps:_*) =>
-        val b = Cell(buffer[A])
+        val b = bufferCell[A]
         for p <- ps do  
-          val c = stage(p)
-          syns += CommonSynapse(b, c.left)
+          val d = stage(p)
+          syns += CommonSynapse(b, d.left)
         Stage(b, Stage.empty.right)
         
       case Concentrate(ps:_*) =>
-        val b = Cell(buffer[B])
+        val b = bufferCell[B]
         for p <- ps do  
-          val c = stage(p)
-          syns += CommonSynapse(c.right, b)
+          val d = stage(p)
+          syns += CommonSynapse(d.right, b)
         Stage(Stage.empty.left, b)
 
       case Ref(t) => 
-        val b = topics.getOrAdd(t, Cell(buffer[A]))
+        val b = topics.getOrAdd(t, bufferCell[A])
         Stage(b, Stage.empty.right)
 
       case Deref(t) => 
-        val b = topics.getOrAdd(t, Cell(buffer[B]))
+        val b = topics.getOrAdd(t, bufferCell[B])
         Stage(Stage.empty.left, b)
 
       case Monitor(p1, p2) => 
@@ -71,30 +72,20 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
         Stage(s1.left, s1.right)
 
       case Reduce(p) => 
-        val b = Cell(buffer[B])
+        val b = bufferCell[B]
         val s = stage(p)
         syns += OneShotSynapse(s.right, b)
         Stage(s.left, b)
 
-      case Input(e) => 
-        val b = Cell(buffer[B])
-        syns += Sensor(e, b)
-        Stage(Stage.empty.left, b)
-
-      case Output(e) => 
-        val b = Cell(buffer[A])
-        syns += Motor(e, b)
-        Stage(b, Stage.empty.right)
-
       case Broadcast(backlog, ps:_*) => 
-        val b = Cell(buffer[A])
+        val b = bufferCell[A]
         val cs = 
           for p <- ps 
           yield 
             val s = stage(p)
-            val c = Cell(if backlog > 1 then queue[A](backlog) else buffer[A])
-            syns += CommonSynapse(c, s.left)
-            c
+            val d = if backlog > 1 then Cell(queue[A](backlog), Pure) else bufferCell[A]
+            syns += CommonSynapse(d, s.left)
+            d
         syns += BroadcastSynapse(b, cs)
         Stage(b, Stage.empty.right)
 
@@ -109,8 +100,8 @@ def compile(system: Process[Nothing, Nothing, Any]): Iterable[Synapse] =
   stage(system)
   syns.toIterable
 
-def compileAndRun(system: Process[Nothing, Nothing, Any]): Unit =
-  val syns = compile(system)
+def compileAndRun[C<: Pure](system: Process[Nothing, Nothing, C, Any], c: C): Unit =
+  val syns = compile(system, c)
 
   def cycle: Unit =
     var changes = false

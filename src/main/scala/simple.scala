@@ -1,12 +1,12 @@
 package machines
 import Machine._
 
-type SimpleMachine[-A, +B] = Machine[A, B, Any]
+type SimpleMachine[-A, +B] = Machine[A, B, Pure, Any]
 
 def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B, p: (S, A) => Boolean): SimpleMachine[A, B] =
   class Plan:
     val phase2f = phase2
-    val stop = Stop(()) 
+    val stop = Return(()) 
 
     def phase1(s1: S): SimpleMachine[A, B] =
       React(s1, phase2f, stop)
@@ -20,7 +20,7 @@ def mealy[A, B, S](s0: S)(f: (S, A) => S, g: (S, A) => B, p: (S, A) => Boolean):
 def moore[A, B, S](s0: S)(f: (S, A) => S, g: S => B, p: S => Boolean): SimpleMachine[A, B] =
   class Plan:
     val phase1f = (s: S, a: A) => phase1(f(s, a))
-    val stop = Stop(()) 
+    val stop = Return(()) 
 
     def phase1(s1: S): SimpleMachine[A, B] =
       if p(s1) then Emit(g(s1), phase2(s1))
@@ -43,12 +43,12 @@ def queue[A](backlog: Int): SimpleMachine[A, A] =
     case class Queue(n: Int, left: List[A], right: List[A], closed: Boolean):
       def machine: SimpleMachine[A, A] = 
         if closed then
-          if n > 0 then dequeue(this) else Stop(())
+          if n > 0 then dequeue(this) else Return(())
         else
           if n > 0 && n < backlog then
-            Branch(React(this, enqueue, Defer(this, close)), Defer(this, dequeue))
+            Branch(React(this, enqueue, Step(this, close)), Step(this, dequeue))
           else if n > 0 then dequeue(this)
-          else React(this, enqueue, Defer(this, close))
+          else React(this, enqueue, Step(this, close))
 
     val enqueue: (Queue, A) => SimpleMachine[A, A] =
       (q, a) => Queue(q.n+1, a :: q.left, q.right, q.closed).machine
@@ -69,6 +69,6 @@ def buffer[A]: SimpleMachine[A, A] =
   class Plan:
     val empty: SimpleMachine[A, A] = React((), accept, stop)
     val accept = (_: Any, a: A) => Emit(a, empty)
-    val stop = Stop(())
+    val stop = Return(())
 
   Plan().empty

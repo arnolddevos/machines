@@ -3,9 +3,9 @@ package examples
 
 import Machine._
 
-val s = React((), (_: Any, i: Int) => Stop("Done"), Stop("Dry"))
-val m = Emit("Hi", Stop(1))
-val c = Stop(12)
+val s = React((), (_: Any, i: Int) => Return("Done"), Return("Dry"))
+val m = Emit("Hi", Return(1))
+val d = Return(12)
 val e = Error(new RuntimeException("oh"))
 
 

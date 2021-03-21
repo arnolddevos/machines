@@ -1,9 +1,9 @@
 package machines
 
-enum BroadcastState[A, B, C]:
-  case Quiescent(cells: List[Cell[A, B, C]])
-  case Sending(a: A, pending: List[Cell[A, B, C]], succeeded: List[Cell[A, B, C]])
-  case Closing(pending: List[Cell[A, B, C]])
+enum BroadcastState[A, B, D]:
+  case Quiescent(cells: List[Cell[A, B, D]])
+  case Sending(a: A, pending: List[Cell[A, B, D]], succeeded: List[Cell[A, B, D]])
+  case Closing(pending: List[Cell[A, B, D]])
 
 import BroadcastState._
 import Machine._
@@ -12,26 +12,26 @@ import Reaction._
 abstract class BroadcastSynapse extends Synapse:
   type A1  
   type B1 <: A2
-  type C1
+  type D1
   type A2
   type B2
-  type C2
-  val left: Cell[A1, B1, C1]
-  var right: BroadcastState[A2, B2, C2]
+  type D2
+  val left: Cell[A1, B1, D1]
+  var right: BroadcastState[A2, B2, D2]
   var live = false
 
   @annotation.tailrec
-  final def broadcast(state: BroadcastState[A2, B2, C2], failed: List[Cell[A2, B2, C2]]=Nil): BroadcastState[A2, B2, C2] =
+  final def broadcast(state: BroadcastState[A2, B2, D2], failed: List[Cell[A2, B2, D2]]=Nil): BroadcastState[A2, B2, D2] =
     state match
-      case Sending(a, c :: pending, succeeded) =>
-        c.accept(a) match 
-          case Accepted => broadcast(Sending(a, pending, c :: succeeded), failed)
-          case Rejected => broadcast(Sending(a, pending, succeeded), c :: failed)
+      case Sending(a, d :: pending, succeeded) =>
+        d.accept(a) match 
+          case Accepted => broadcast(Sending(a, pending, d :: succeeded), failed)
+          case Rejected => broadcast(Sending(a, pending, succeeded), d :: failed)
           case Blocked  => broadcast(Sending(a, pending, succeeded), failed)
-      case Closing(c :: pending) =>
-        c.close match 
+      case Closing(d :: pending) =>
+        d.close match 
           case Accepted | Blocked => broadcast(Closing(pending), failed)
-          case Rejected => broadcast(Closing(pending), c :: failed)
+          case Rejected => broadcast(Closing(pending), d :: failed)
       case Sending(a, Nil, succeeded) =>
           if failed.isEmpty then Quiescent(succeeded)
           else Sending(a, failed, succeeded)
@@ -43,22 +43,23 @@ abstract class BroadcastSynapse extends Synapse:
   def run: Boolean =
     val state = right match
       case s @ Quiescent(cells) =>
-        left.state.seekEmit match 
-          case l @ Emit(b, c) =>
+        left.offer match 
+          case l @ Emit(b, d) =>
             if cells.isEmpty then 
-              left.block(l)
+              left.state = l
+              left.block
               live = false
               s
             else
-              left.continue(c.seekBranch)
+              left.state = d.seekBranch
               broadcast(Sending(b, cells, Nil))
-          case l @ Stop(_) =>
+          case l @ Return(_) =>
             if cells.isEmpty then
-              left.continue(l)
+              left.state = l
               live = false
               s
             else
-              left.continue(l)
+              left.state = l
               broadcast(Closing(cells))
           case _ => s
       case s =>
@@ -69,15 +70,15 @@ abstract class BroadcastSynapse extends Synapse:
     changed
 
 object BroadcastSynapse:
-  def apply[Al, Bl <: Ar, Cl, Ar, Br, Cr](l: Cell[Al, Bl, Cl], r: Iterable[Cell[Ar, Br, Cr]]) = 
+  def apply[Al, Bl <: Ar, Dl, Ar, Br, Dr](l: Cell[Al, Bl, Dl], r: Iterable[Cell[Ar, Br, Dr]]) = 
     new BroadcastSynapse:
       type A1 = Al
       type B1 = Bl
-      type C1 = Cl
+      type D1 = Dl
       type A2 = Ar
       type B2 = Br
-      type C2 = Cr
+      type D2 = Dr
       val left = l
       var right = Quiescent(r.toList)
-      for c <- r do c.open
+      for d <- r do d.open
       left.subscribe
